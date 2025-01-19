@@ -6,29 +6,29 @@
   } from '@tanstack/svelte-query'
 
   let intervalMs = 1000
-  let value: string
+  let value = ''
 
   const client = useQueryClient()
 
   const endpoint = 'http://localhost:5173/api/data'
 
-  const todos = createQuery<{ items: string[] }, Error>({
+  $: todos = createQuery<{ items: string[] }>({
     queryKey: ['refetch'],
     queryFn: async () => await fetch(endpoint).then((r) => r.json()),
     // Refetch the data every second
     refetchInterval: intervalMs,
   })
 
-  const addMutation = createMutation(
-    (value: string) => fetch(`${endpoint}?add=${value}`).then((r) => r.json()),
-    { onSuccess: () => client.invalidateQueries(['refetch']) },
-  )
-  const clearMutation = createMutation(
-    () => fetch(`${endpoint}?clear=1`).then((r) => r.json()),
-    {
-      onSuccess: () => client.invalidateQueries(['refetch']),
-    },
-  )
+  const addMutation = createMutation({
+    mutationFn: (value: string) =>
+      fetch(`${endpoint}?add=${value}`).then((r) => r.json()),
+    onSuccess: () => client.invalidateQueries({ queryKey: ['refetch'] }),
+  })
+
+  const clearMutation = createMutation({
+    mutationFn: () => fetch(`${endpoint}?clear=1`).then((r) => r.json()),
+    onSuccess: () => client.invalidateQueries({ queryKey: ['refetch'] }),
+  })
 </script>
 
 <h1>Auto Refetch with stale-time set to 1s</h1>
@@ -50,10 +50,10 @@
           width:.75rem;
           height:.75rem; 
           background: {$todos.isFetching ? 'green' : 'transparent'};
-          transition:: {!$todos.isFetching ? 'all .3s ease' : 'none'};
+          transition: {!$todos.isFetching ? 'all .3s ease' : 'none'};
           border-radius: 100%;
-          transform: 'scale(2)"
-    />
+          transform: scale(1.5)"
+    ></span>
   </div>
 </label>
 <h2>Todo List</h2>
@@ -69,7 +69,7 @@
   <input placeholder="enter something" bind:value />
 </form>
 
-{#if $todos.isLoading}
+{#if $todos.isPending}
   Loading...
 {/if}
 {#if $todos.error}

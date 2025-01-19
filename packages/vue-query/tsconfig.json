@@ -1,13 +1,13 @@
 {
-  "extends": "../../tsconfig.base.json",
+  "extends": "../../tsconfig.json",
   "compilerOptions": {
-    "composite": true,
-    "rootDir": "./src",
-    "outDir": "./build/lib",
-    "tsBuildInfoFile": "./build/.tsbuildinfo"
+    "moduleResolution": "Bundler"
   },
-  "include": ["src"],
-  "references": [
-    { "path": "../query-core" }
+  "include": [
+    "src",
+    "eslint.config.js",
+    "test-setup.ts",
+    "tsup.config.js",
+    "vite.config.ts"
   ]
 }

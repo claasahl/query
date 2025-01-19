@@ -1,54 +1,53 @@
-import * as React from 'react';
-import { FlatList, RefreshControl } from 'react-native';
-import { useQuery } from '@tanstack/react-query';
-
-import { StackNavigationProp } from '@react-navigation/stack';
-import { LoadingIndicator } from '@app/components/LoadingIndicator';
-import { ErrorMessage } from '@app/components/ErrorMessage';
-import { Divider } from '@app/components/Divider';
-import { ListItem } from '@app/components/ListItem';
-import { useRefreshByUser } from '@app/hooks/useRefreshByUser';
-import { useRefreshOnFocus } from '@app/hooks/useRefreshOnFocus';
-import { fetchMovies, Movie } from '@app/lib/api';
-import { MoviesStackNavigator } from '@app/navigation/types';
+import * as React from 'react'
+import { FlatList, RefreshControl } from 'react-native'
+import { useQuery } from '@tanstack/react-query'
+import { LoadingIndicator } from '../components/LoadingIndicator'
+import { ErrorMessage } from '../components/ErrorMessage'
+import { Divider } from '../components/Divider'
+import { ListItem } from '../components/ListItem'
+import { useRefreshByUser } from '../hooks/useRefreshByUser'
+import { useRefreshOnFocus } from '../hooks/useRefreshOnFocus'
+import { fetchMovies } from '../lib/api'
+import type { Movie, MovieDetails } from '../lib/api'
+import type { MoviesStackNavigator } from '../navigation/types'
+import type { StackNavigationProp } from '@react-navigation/stack'
 
 type MoviesListScreenNavigationProp = StackNavigationProp<
   MoviesStackNavigator,
   'MoviesList'
->;
+>
 
 type Props = {
-  navigation: MoviesListScreenNavigationProp;
-};
+  navigation: MoviesListScreenNavigationProp
+}
 
 export function MoviesListScreen({ navigation }: Props) {
-  const { isLoading, error, data, refetch } = useQuery<Movie[], Error>(
-    ['movies'],
-    fetchMovies
-  );
-  const { isRefetchingByUser, refetchByUser } = useRefreshByUser(refetch);
-  useRefreshOnFocus(refetch);
+  const { isPending, error, data, refetch } = useQuery<Movie[], Error>({
+    queryKey: ['movies'],
+    queryFn: fetchMovies,
+  })
+  const { isRefetchingByUser, refetchByUser } = useRefreshByUser(refetch)
+  useRefreshOnFocus(refetch)
 
   const onListItemPress = React.useCallback(
-    (movie) => {
+    (movie: MovieDetails) => {
       navigation.navigate('MovieDetails', {
         movie,
-      });
+      })
     },
-    [navigation]
-  );
+    [navigation],
+  )
 
   const renderItem = React.useCallback(
-    ({ item }) => {
-      return <ListItem item={item} onPress={onListItemPress} />;
+    ({ item }: { item: MovieDetails }) => {
+      return <ListItem item={item} onPress={onListItemPress} />
     },
-    [onListItemPress]
-  );
+    [onListItemPress],
+  )
 
-  if (isLoading) return <LoadingIndicator />;
+  if (isPending) return <LoadingIndicator />
 
-  if (error) return <ErrorMessage message={error.message}></ErrorMessage>;
-
+  if (error) return <ErrorMessage message={error.message}></ErrorMessage>
   return (
     <FlatList
       data={data}
@@ -62,5 +61,5 @@ export function MoviesListScreen({ navigation }: Props) {
         />
       }
     ></FlatList>
-  );
+  )
 }

@@ -1,10 +1,7 @@
-/* istanbul ignore file */
-
 import type { Query } from '@tanstack/query-core'
 
 type SortFn = (a: Query, b: Query) => number
 
-// eslint-disable-next-line no-shadow
 enum QueryState {
   Fetching = 0,
   Fresh,

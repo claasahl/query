@@ -1,27 +1,22 @@
 import { isVue2 } from 'vue-demi'
-import type { QueryClientConfig } from '@tanstack/query-core'
+import { isServer } from '@tanstack/query-core'
 
 import { QueryClient } from './queryClient'
 import { getClientKey } from './utils'
 import { setupDevtools } from './devtools/devtools'
-import type { MaybeRefDeep } from './types'
-
-declare global {
-  interface Window {
-    __VUE_QUERY_CONTEXT__?: QueryClient
-  }
-}
+import type { QueryClientConfig } from '@tanstack/query-core'
 
 type ClientPersister = (client: QueryClient) => [() => void, Promise<void>]
 
 interface CommonOptions {
+  enableDevtoolsV6Plugin?: boolean
   queryClientKey?: string
-  contextSharing?: boolean
   clientPersister?: ClientPersister
+  clientPersisterOnSuccess?: (client: QueryClient) => void
 }
 
 interface ConfigOptions extends CommonOptions {
-  queryClientConfig?: MaybeRefDeep<QueryClientConfig>
+  queryClientConfig?: QueryClientConfig
 }
 
 interface ClientOptions extends CommonOptions {
@@ -38,25 +33,15 @@ export const VueQueryPlugin = {
     if ('queryClient' in options && options.queryClient) {
       client = options.queryClient
     } else {
-      if (options.contextSharing && typeof window !== 'undefined') {
-        if (!window.__VUE_QUERY_CONTEXT__) {
-          const clientConfig =
-            'queryClientConfig' in options
-              ? options.queryClientConfig
-              : undefined
-          client = new QueryClient(clientConfig)
-          window.__VUE_QUERY_CONTEXT__ = client
-        } else {
-          client = window.__VUE_QUERY_CONTEXT__
-        }
-      } else {
-        const clientConfig =
-          'queryClientConfig' in options ? options.queryClientConfig : undefined
-        client = new QueryClient(clientConfig)
-      }
+      const clientConfig =
+        'queryClientConfig' in options ? options.queryClientConfig : undefined
+      client = new QueryClient(clientConfig)
     }
 
-    client.mount()
+    if (!isServer) {
+      client.mount()
+    }
+
     let persisterUnmount = () => {
       // noop
     }
@@ -67,15 +52,8 @@ export const VueQueryPlugin = {
       persisterUnmount = unmount
       promise.then(() => {
         client.isRestoring.value = false
+        options.clientPersisterOnSuccess?.(client)
       })
-    }
-
-    if (process.env.NODE_ENV !== 'production' && options.contextSharing) {
-      client
-        .getLogger()
-        .error(
-          `The contextSharing option has been deprecated and will be removed in the next major version`,
-        )
     }
 
     const cleanup = () => {
@@ -93,7 +71,6 @@ export const VueQueryPlugin = {
       }
     }
 
-    /* istanbul ignore next */
     if (isVue2) {
       app.mixin({
         beforeCreate() {
@@ -109,7 +86,7 @@ export const VueQueryPlugin = {
           this._provided[clientKey] = client
 
           if (process.env.NODE_ENV === 'development') {
-            if (this === this.$root) {
+            if (this === this.$root && options.enableDevtoolsV6Plugin) {
               setupDevtools(this, client)
             }
           }
@@ -119,7 +96,9 @@ export const VueQueryPlugin = {
       app.provide(clientKey, client)
 
       if (process.env.NODE_ENV === 'development') {
-        setupDevtools(app, client)
+        if (options.enableDevtoolsV6Plugin) {
+          setupDevtools(app, client)
+        }
       }
     }
   },

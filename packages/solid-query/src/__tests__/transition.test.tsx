@@ -1,10 +1,10 @@
-import { fireEvent, render, screen, waitFor } from 'solid-testing-library'
-
-import { createSignal, Show, startTransition, Suspense } from 'solid-js'
-import { createQuery, QueryCache, QueryClientProvider } from '..'
+import { describe, it } from 'vitest'
+import { fireEvent, render, waitFor } from '@solidjs/testing-library'
+import { Show, Suspense, createSignal, startTransition } from 'solid-js'
+import { QueryCache, QueryClientProvider, createQuery } from '..'
 import { createQueryClient, queryKey, sleep } from './utils'
 
-describe("useQuery's in Suspense mode with transitions", () => {
+describe("createQuery's in Suspense mode with transitions", () => {
   const queryCache = new QueryCache()
   const queryClient = createQueryClient({ queryCache })
 
@@ -12,11 +12,13 @@ describe("useQuery's in Suspense mode with transitions", () => {
     const key = queryKey()
 
     function Suspended() {
-      const state = createQuery(key, async () => {
-        await sleep(10)
-        return true
-      })
-
+      const state = createQuery(() => ({
+        queryKey: key,
+        queryFn: async () => {
+          await sleep(10)
+          return true
+        },
+      }))
       return <Show when={state.data}>Message</Show>
     }
 
@@ -42,17 +44,17 @@ describe("useQuery's in Suspense mode with transitions", () => {
       )
     }
 
-    render(() => (
+    const rendered = render(() => (
       <QueryClientProvider client={queryClient}>
         <Page />
       </QueryClientProvider>
     ))
 
-    await waitFor(() => screen.getByText('Show'))
-    fireEvent.click(screen.getByLabelText('toggle'))
+    await waitFor(() => rendered.getByText('Show'))
+    fireEvent.click(rendered.getByLabelText('toggle'))
 
-    await waitFor(() => screen.getByText('Message'))
+    await waitFor(() => rendered.getByText('Message'))
     // verify that the button also updated. See https://github.com/solidjs/solid/issues/1249
-    await waitFor(() => screen.getByText('Hide'))
+    await waitFor(() => rendered.getByText('Hide'))
   })
 })

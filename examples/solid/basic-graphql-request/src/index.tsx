@@ -1,24 +1,31 @@
 /* @refresh reload */
 import {
-  createQuery,
   QueryClient,
   QueryClientProvider,
-  useQueryClient,
+  createQuery,
 } from '@tanstack/solid-query'
-import type { Accessor, Setter } from 'solid-js'
-import { createSignal, For, Match, Switch } from 'solid-js'
+import { SolidQueryDevtools } from '@tanstack/solid-query-devtools'
+import { For, Match, Switch, createSignal } from 'solid-js'
 import { render } from 'solid-js/web'
-import { request, gql } from 'graphql-request'
+import { gql, request } from 'graphql-request'
+import type { Accessor, Setter } from 'solid-js'
 
 const endpoint = 'https://graphqlzero.almansi.me/api'
 
 const queryClient = new QueryClient()
+
+type Post = {
+  id: number
+  title: string
+  body: string
+}
 
 function App() {
   const [postId, setPostId] = createSignal(-1)
 
   return (
     <QueryClientProvider client={queryClient}>
+      <SolidQueryDevtools />
       <p>
         As you visit the posts below, you will notice them in a loading state
         the first time you load them. However, after you return to this list and
@@ -39,12 +46,12 @@ function App() {
 }
 
 function createPosts() {
-  return createQuery({
-    queryKey: () => ['posts'],
+  return createQuery(() => ({
+    queryKey: ['posts'],
     queryFn: async () => {
       const {
         posts: { data },
-      } = await request(
+      } = await request<{ posts: { data: Array<Post> } }>(
         endpoint,
         gql`
           query {
@@ -59,11 +66,10 @@ function createPosts() {
       )
       return data
     },
-  })
+  }))
 }
 
 function Posts(props: { setPostId: Setter<number> }) {
-  const queryClient = useQueryClient()
   const state = createPosts()
 
   return (
@@ -71,7 +77,7 @@ function Posts(props: { setPostId: Setter<number> }) {
       <h1>Posts</h1>
       <div>
         <Switch>
-          <Match when={state.status === 'loading'}>Loading...</Match>
+          <Match when={state.status === 'pending'}>Loading...</Match>
           <Match when={state.status === 'error'}>
             <span>Error: {(state.error as Error).message}</span>
           </Match>
@@ -111,14 +117,14 @@ function Posts(props: { setPostId: Setter<number> }) {
 }
 
 function createPost(postId: Accessor<number>) {
-  return createQuery({
-    queryKey: () => ['post', postId()],
-    queryFn: async (context) => {
-      const { post } = await request(
+  return createQuery(() => ({
+    queryKey: ['post', postId()],
+    queryFn: async () => {
+      const { post } = await request<{ post: Post }>(
         endpoint,
         gql`
         query {
-          post(id: ${context.queryKey[1]}) {
+          post(id: ${postId()}) {
             id
             title
             body
@@ -129,8 +135,8 @@ function createPost(postId: Accessor<number>) {
 
       return post
     },
-    enabled: !!postId,
-  })
+    enabled: !!postId(),
+  }))
 }
 
 function Post(props: { postId: number; setPostId: Setter<number> }) {
@@ -144,7 +150,7 @@ function Post(props: { postId: number; setPostId: Setter<number> }) {
         </a>
       </div>
       <Switch>
-        <Match when={!props.postId || state.status === 'loading'}>
+        <Match when={!props.postId || state.status === 'pending'}>
           Loading...
         </Match>
         <Match when={state.status === 'error'}>
@@ -152,9 +158,9 @@ function Post(props: { postId: number; setPostId: Setter<number> }) {
         </Match>
         <Match when={state.data !== undefined}>
           <>
-            <h1>{state.data.title}</h1>
+            <h1>{state.data?.title}</h1>
             <div>
-              <p>{state.data.body}</p>
+              <p>{state.data?.body}</p>
             </div>
             <div>{state.isFetching ? 'Background Updating...' : ' '}</div>
           </>

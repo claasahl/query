@@ -1,99 +1,59 @@
 name: pr
-on: [pull_request]
+
+on:
+  pull_request:
+  push:
+    branches: ['svelte-5-adapter']
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  NX_CLOUD_ACCESS_TOKEN: ${{ secrets.NX_CLOUD_ACCESS_TOKEN }}
+
+permissions:
+  contents: read
+
 jobs:
   test:
-    name: 'Test'
+    name: Test
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
-      - uses: pnpm/action-setup@v2.2.2
+      - name: Checkout
+        uses: actions/checkout@v4.2.2
         with:
-          version: 7
-      - uses: actions/setup-node@v3
+          fetch-depth: 0
+      - name: Start Nx Agents
+        run: npx nx-cloud start-ci-run --distribute-on=".nx/workflows/dynamic-changesets.yaml"
+      - name: Setup Tools
+        uses: tanstack/config/.github/setup@main
+      - name: Get base and head commits for `nx affected`
+        uses: nrwl/nx-set-shas@v4.1.2
         with:
-          node-version: 16.14.2
-          cache: 'pnpm'
-      - name: Install dependencies
-        run: pnpm --filter "./packages/**" --filter query --prefer-offline install
-      - run: pnpm run test:jest
+          main-branch-name: main
+      - name: Run Checks
+        run: pnpm run test:pr --parallel=3
+      - name: Stop Nx Agents
+        if: ${{ always() }}
+        run: npx nx-cloud stop-all-agents
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v2
-  lint:
-    name: 'Lint'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-      - uses: pnpm/action-setup@v2.2.2
+        uses: codecov/codecov-action@v4.6.0
         with:
-          version: 7
-      - uses: actions/setup-node@v3
-        with:
-          node-version: 16.14.2
-          cache: 'pnpm'
-      - name: Install dependencies
-        run: pnpm --filter "./packages/**" --filter query --prefer-offline install
-      - run: pnpm run test:eslint
-  typecheck:
-    name: 'Typecheck'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-      - uses: pnpm/action-setup@v2.2.2
-        with:
-          version: 7
-      - uses: actions/setup-node@v3
-        with:
-          node-version: 16.14.2
-          cache: 'pnpm'
-      - name: Install dependencies
-        run: pnpm --filter "./packages/**" --filter query --prefer-offline install
-      - run: pnpm run typecheck
-  format:
-    name: 'Format'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-      - uses: pnpm/action-setup@v2.2.2
-        with:
-          version: 7
-      - uses: actions/setup-node@v3
-        with:
-          node-version: 16.14.2
-          cache: 'pnpm'
-      - name: Install dependencies
-        run: pnpm --filter "./packages/**" --filter query --prefer-offline install
-      - run: pnpm run test:format
-  test-react-17:
-    name: 'Test React 17'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-      - uses: pnpm/action-setup@v2.2.2
-        with:
-          version: 7
-      - uses: actions/setup-node@v3
-        with:
-          node-version: 16.14.2
-          cache: 'pnpm'
-      - name: Install dependencies
-        run: pnpm --filter "./packages/**" --filter query --prefer-offline install
-      - run: pnpm run test:react:17
+          directory: packages
         env:
-          REACTJS_VERSION: 17
-  test-size:
-    name: 'Size'
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+  preview:
+    name: Preview
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
-      - uses: pnpm/action-setup@v2.2.2
+      - name: Checkout
+        uses: actions/checkout@v4.2.2
         with:
-          version: 7
-      - uses: actions/setup-node@v3
-        with:
-          node-version: 16.14.2
-          cache: 'pnpm'
-      - name: Install dependencies
-        run: pnpm --filter "./packages/**" --filter query --prefer-offline install
-      - run: pnpm run test:size
-        env:
-          BUNDLEWATCH_GITHUB_TOKEN: ${{ secrets.BUNDLEWATCH_GITHUB_TOKEN }}
+          fetch-depth: 0
+      - name: Setup Tools
+        uses: tanstack/config/.github/setup@main
+      - name: Build Packages
+        run: pnpm run build:all
+      - name: Publish Previews
+        run: pnpx pkg-pr-new publish --pnpm --compact './packages/*' --template './examples/*/*'

@@ -1,13 +1,8 @@
-import { isQueryKey, updateState, cloneDeep, cloneDeepUnref } from '../utils'
+import { describe, expect, test } from 'vitest'
 import { reactive, ref } from 'vue-demi'
+import { cloneDeep, cloneDeepUnref, updateState } from '../utils'
 
 describe('utils', () => {
-  describe('isQueryKey', () => {
-    test('should detect an array as query key', () => {
-      expect(isQueryKey(['string', 'array'])).toEqual(true)
-    })
-  })
-
   describe('updateState', () => {
     test('should update first object with values from the second one', () => {
       const origin = { option1: 'a', option2: 'b', option3: 'c' }
@@ -85,7 +80,7 @@ describe('utils', () => {
       expect(cp).not.toBe(val)
       expect(cp[3]).toBe(val[3]) // Set([3, 4])
       expect(cp[4]).not.toBe(val[4]) // [5, 6, { a: 1 }]
-      expect((cp[4] as number[])[2]).not.toBe((val[4] as number[])[2]) // { a : 1 }
+      expect((cp[4] as Array<number>)[2]).not.toBe((val[4] as Array<number>)[2]) // { a : 1 }
     })
 
     test('should deeply copy object', () => {
@@ -119,7 +114,7 @@ describe('utils', () => {
   describe('cloneDeepUnref', () => {
     test('should unref primitives', () => {
       expect(cloneDeepUnref(ref(34))).toBe(34)
-      expect(cloneDeepUnref(ref('mystr'))).toBe('mystr')
+      expect(cloneDeepUnref(ref('myStr'))).toBe('myStr')
     })
 
     test('should deeply unref arrays', () => {
@@ -145,6 +140,12 @@ describe('utils', () => {
         c: ['c1', ['c2']],
         d: { e: 'e' },
       })
+    })
+
+    test('should clone getters returning values in queryKey', () => {
+      const val = ref({ queryKey: [1, 2, () => '3'] })
+      const cp = cloneDeepUnref(val)
+      expect(cp).toStrictEqual({ queryKey: [1, 2, '3'] })
     })
 
     test('should unref undefined', () => {

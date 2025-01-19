@@ -1,36 +1,24 @@
-import * as React from 'react'
-import ReactDOM from 'react-dom'
-import ReactDOMTestUtils from 'react-dom/test-utils'
-import ReactDOMServer from 'react-dom/server'
-// eslint-disable-next-line import/no-unresolved -- types only for module augmentation
-import type {} from 'react-dom/next'
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
+import { hydrateRoot } from 'react-dom/client'
+import { act } from 'react'
+import * as ReactDOMServer from 'react-dom/server'
 
 import {
-  useQuery,
-  QueryClientProvider,
   QueryCache,
+  QueryClientProvider,
   dehydrate,
   hydrate,
+  useQuery,
 } from '..'
 import { createQueryClient, setIsServer, sleep } from './utils'
 
-const isReact18 = () => (process.env.REACTJS_VERSION || '18') === '18'
-
 const ReactHydrate = (element: React.ReactElement, container: Element) => {
-  if (isReact18()) {
-    let root: any
-    ReactDOMTestUtils.act(() => {
-      // @ts-expect-error
-      root = ReactDOM.hydrateRoot(container, element)
-    })
-    return () => {
-      root.unmount()
-    }
-  }
-
-  ReactDOM.hydrate(element, container)
+  let root: any
+  act(() => {
+    root = hydrateRoot(container, element)
+  })
   return () => {
-    ReactDOM.unmountComponentAtNode(container)
+    root.unmount()
   }
 }
 
@@ -55,20 +43,17 @@ describe('Server side rendering with de/rehydration', () => {
     globalThis.IS_REACT_ACT_ENVIRONMENT = previousIsReactActEnvironment
   })
   it('should not mismatch on success', async () => {
-    const consoleMock = jest.spyOn(console, 'error')
+    const consoleMock = vi.spyOn(console, 'error')
     consoleMock.mockImplementation(() => undefined)
 
-    if (!isReact18()) {
-      return
-    }
-    const fetchDataSuccess = jest.fn<
-      ReturnType<typeof fetchData>,
-      Parameters<typeof fetchData>
-    >(fetchData)
+    const fetchDataSuccess = vi.fn<typeof fetchData>(fetchData)
 
     // -- Shared part --
     function SuccessComponent() {
-      const result = useQuery(['success'], () => fetchDataSuccess('success!'))
+      const result = useQuery({
+        queryKey: ['success'],
+        queryFn: () => fetchDataSuccess('success!'),
+      })
       return (
         <PrintStateComponent componentName="SuccessComponent" result={result} />
       )
@@ -81,9 +66,10 @@ describe('Server side rendering with de/rehydration', () => {
     const prefetchClient = createQueryClient({
       queryCache: prefetchCache,
     })
-    await prefetchClient.prefetchQuery(['success'], () =>
-      fetchDataSuccess('success'),
-    )
+    await prefetchClient.prefetchQuery({
+      queryKey: ['success'],
+      queryFn: () => fetchDataSuccess('success'),
+    })
     const dehydratedStateServer = dehydrate(prefetchClient)
     const renderCache = new QueryCache()
     const renderClient = createQueryClient({
@@ -121,11 +107,8 @@ describe('Server side rendering with de/rehydration', () => {
     )
 
     // Check that we have no React hydration mismatches
-    // this should be zero calls and can be changed once we drop react17 support
-    expect(consoleMock).toHaveBeenNthCalledWith(
-      1,
-      'Warning: You are importing hydrateRoot from "react-dom" which is not supported. You should instead import it from "react-dom/client".',
-    )
+    expect(consoleMock).toHaveBeenCalledTimes(0)
+
     expect(fetchDataSuccess).toHaveBeenCalledTimes(2)
     expect(el.innerHTML).toBe(expectedMarkup)
 
@@ -135,19 +118,18 @@ describe('Server side rendering with de/rehydration', () => {
   })
 
   it('should not mismatch on error', async () => {
-    const consoleMock = jest.spyOn(console, 'error')
+    const consoleMock = vi.spyOn(console, 'error')
     consoleMock.mockImplementation(() => undefined)
 
-    if (!isReact18()) {
-      return
-    }
-    const fetchDataError = jest.fn(() => {
+    const fetchDataError = vi.fn(() => {
       throw new Error('fetchDataError')
     })
 
     // -- Shared part --
     function ErrorComponent() {
-      const result = useQuery(['error'], () => fetchDataError(), {
+      const result = useQuery({
+        queryKey: ['error'],
+        queryFn: () => fetchDataError(),
         retry: false,
       })
       return (
@@ -161,7 +143,10 @@ describe('Server side rendering with de/rehydration', () => {
     const prefetchClient = createQueryClient({
       queryCache: prefetchCache,
     })
-    await prefetchClient.prefetchQuery(['error'], () => fetchDataError())
+    await prefetchClient.prefetchQuery({
+      queryKey: ['error'],
+      queryFn: () => fetchDataError(),
+    })
     const dehydratedStateServer = dehydrate(prefetchClient)
     const renderCache = new QueryCache()
     const renderClient = createQueryClient({
@@ -178,7 +163,7 @@ describe('Server side rendering with de/rehydration', () => {
     setIsServer(false)
 
     const expectedMarkup =
-      'ErrorComponent - status:loading fetching:true data:undefined'
+      'ErrorComponent - status:pending fetching:true data:undefined'
 
     expect(markup).toBe(expectedMarkup)
 
@@ -197,8 +182,7 @@ describe('Server side rendering with de/rehydration', () => {
       el,
     )
 
-    // We expect exactly one console.error here, which is from the
-    expect(consoleMock).toHaveBeenCalledTimes(1)
+    expect(consoleMock).toHaveBeenCalledTimes(0)
     expect(fetchDataError).toHaveBeenCalledTimes(2)
     expect(el.innerHTML).toBe(expectedMarkup)
     await sleep(50)
@@ -213,20 +197,17 @@ describe('Server side rendering with de/rehydration', () => {
   })
 
   it('should not mismatch on queries that were not prefetched', async () => {
-    const consoleMock = jest.spyOn(console, 'error')
+    const consoleMock = vi.spyOn(console, 'error')
     consoleMock.mockImplementation(() => undefined)
 
-    if (!isReact18()) {
-      return
-    }
-    const fetchDataSuccess = jest.fn<
-      ReturnType<typeof fetchData>,
-      Parameters<typeof fetchData>
-    >(fetchData)
+    const fetchDataSuccess = vi.fn<typeof fetchData>(fetchData)
 
     // -- Shared part --
     function SuccessComponent() {
-      const result = useQuery(['success'], () => fetchDataSuccess('success!'))
+      const result = useQuery({
+        queryKey: ['success'],
+        queryFn: () => fetchDataSuccess('success!'),
+      })
       return (
         <PrintStateComponent componentName="SuccessComponent" result={result} />
       )
@@ -249,7 +230,7 @@ describe('Server side rendering with de/rehydration', () => {
     setIsServer(false)
 
     const expectedMarkup =
-      'SuccessComponent - status:loading fetching:true data:undefined'
+      'SuccessComponent - status:pending fetching:true data:undefined'
 
     expect(markup).toBe(expectedMarkup)
 
@@ -269,11 +250,7 @@ describe('Server side rendering with de/rehydration', () => {
     )
 
     // Check that we have no React hydration mismatches
-    // this should be zero calls and can be changed once we drop react17 support
-    expect(consoleMock).toHaveBeenNthCalledWith(
-      1,
-      'Warning: You are importing hydrateRoot from "react-dom" which is not supported. You should instead import it from "react-dom/client".',
-    )
+    expect(consoleMock).toHaveBeenCalledTimes(0)
     expect(fetchDataSuccess).toHaveBeenCalledTimes(1)
     expect(el.innerHTML).toBe(expectedMarkup)
     await sleep(50)

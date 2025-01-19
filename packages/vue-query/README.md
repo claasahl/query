@@ -13,7 +13,7 @@ Support for Vue 2.x via [vue-demi](https://github.com/vueuse/vue-demi)
 
 # Documentation
 
-Visit https://tanstack.com/query/v4/docs/adapters/vue-query
+Visit https://tanstack.com/query/latest/docs/vue/overview
 
 # Quick Features
 
@@ -36,10 +36,24 @@ Visit https://tanstack.com/query/v4/docs/adapters/vue-query
 
    ```bash
    $ npm i @tanstack/vue-query
-   # or
+   ```
+
+   or
+
+   ```bash
    $ pnpm add @tanstack/vue-query
-   # or
+   ```
+
+   or
+
+   ```bash
    $ yarn add @tanstack/vue-query
+   ```
+
+   or
+
+   ```bash
+   $ bun add @tanstack/vue-query
    ```
 
    > If you are using Vue 2.6, make sure to also setup [@vue/composition-api](https://github.com/vuejs/composition-api)
@@ -47,37 +61,41 @@ Visit https://tanstack.com/query/v4/docs/adapters/vue-query
 2. Initialize **Vue Query** via **VueQueryPlugin**
 
    ```tsx
-   import { createApp } from "vue";
-   import { VueQueryPlugin } from "@tanstack/vue-query";
+   import { createApp } from 'vue'
+   import { VueQueryPlugin } from '@tanstack/vue-query'
 
-   import App from "./App.vue";
+   import App from './App.vue'
 
-   createApp(App).use(VueQueryPlugin).mount("#app");
+   createApp(App).use(VueQueryPlugin).mount('#app')
    ```
 
 3. Use query
 
    ```tsx
-   import { defineComponent } from "vue";
-   import { useQuery } from "@tanstack/vue-query";
+   import { defineComponent } from 'vue'
+   import { useQuery } from '@tanstack/vue-query'
 
    export default defineComponent({
-     name: "MyComponent",
+     name: 'MyComponent',
      setup() {
-       const query = useQuery({ queryKey: ["todos"], queryFn: getTodos });
+       const query = useQuery({ queryKey: ['todos'], queryFn: getTodos })
 
        return {
          query,
-       };
+       }
      },
-   });
+   })
    ```
 
 4. If you need to update options on your query dynamically, make sure to pass them as reactive variables
 
    ```tsx
-   const id = ref(1);
-   const enabled = ref(false);
+   const id = ref(1)
+   const enabled = ref(false)
 
-   const query = useQuery({ queyKey: ["todos", id], queryFn: () => getTodos(id), enabled });
+   const query = useQuery({
+     queryKey: ['todos', id],
+     queryFn: () => getTodos(id),
+     enabled,
+   })
    ```

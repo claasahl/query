@@ -1,11 +1,20 @@
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { asyncThrottle } from '../asyncThrottle'
 import { sleep as delay } from './utils'
 
 describe('asyncThrottle', () => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
   test('basic', async () => {
     const interval = 10
-    const execTimeStamps: number[] = []
-    const mockFunc = jest.fn(
+    const execTimeStamps: Array<number> = []
+    const mockFunc = vi.fn(
       async (id: number, complete?: (value?: unknown) => void) => {
         await delay(1)
         execTimeStamps.push(Date.now())
@@ -17,10 +26,15 @@ describe('asyncThrottle', () => {
     const testFunc = asyncThrottle(mockFunc, { interval })
 
     testFunc(1)
-    await delay(1)
+    await vi.advanceTimersByTimeAsync(1)
+
     testFunc(2)
-    await delay(1)
-    await new Promise((resolve) => testFunc(3, resolve))
+    await vi.advanceTimersByTimeAsync(1)
+
+    new Promise((resolve) => testFunc(3, resolve))
+
+    await vi.advanceTimersToNextTimerAsync()
+    await vi.advanceTimersByTimeAsync(interval)
 
     expect(mockFunc).toBeCalledTimes(2)
     expect(mockFunc.mock.calls[1]?.[0]).toBe(3)
@@ -32,8 +46,8 @@ describe('asyncThrottle', () => {
 
   test('Bug #3331 case 1: Special timing', async () => {
     const interval = 1000
-    const execTimeStamps: number[] = []
-    const mockFunc = jest.fn(
+    const execTimeStamps: Array<number> = []
+    const mockFunc = vi.fn(
       async (id: number, complete?: (value?: unknown) => void) => {
         await delay(30)
         execTimeStamps.push(Date.now())
@@ -46,10 +60,13 @@ describe('asyncThrottle', () => {
 
     testFunc(1)
     testFunc(2)
-    await delay(35)
+    await vi.advanceTimersByTimeAsync(35)
     testFunc(3)
-    await delay(35)
-    await new Promise((resolve) => testFunc(4, resolve))
+    await vi.advanceTimersByTimeAsync(35)
+    new Promise((resolve) => testFunc(4, resolve))
+
+    await vi.advanceTimersToNextTimerAsync()
+    await vi.advanceTimersByTimeAsync(interval)
 
     expect(mockFunc).toBeCalledTimes(2)
     expect(mockFunc.mock.calls[1]?.[0]).toBe(4)
@@ -61,8 +78,8 @@ describe('asyncThrottle', () => {
 
   test('Bug #3331 case 2: "func" execution time is greater than the interval.', async () => {
     const interval = 1000
-    const execTimeStamps: number[] = []
-    const mockFunc = jest.fn(
+    const execTimeStamps: Array<number> = []
+    const mockFunc = vi.fn(
       async (id: number, complete?: (value?: unknown) => void) => {
         await delay(interval + 10)
         execTimeStamps.push(Date.now())
@@ -75,7 +92,11 @@ describe('asyncThrottle', () => {
 
     testFunc(1)
     testFunc(2)
-    await new Promise((resolve) => testFunc(3, resolve))
+    new Promise((resolve) => testFunc(3, resolve))
+
+    await vi.advanceTimersToNextTimerAsync()
+    await vi.advanceTimersByTimeAsync(interval + 10)
+    await vi.advanceTimersByTimeAsync(interval + 10)
 
     expect(mockFunc).toBeCalledTimes(2)
     expect(mockFunc.mock.calls[1]?.[0]).toBe(3)
@@ -86,7 +107,9 @@ describe('asyncThrottle', () => {
   })
 
   test('"func" throw error not break next invoke', async () => {
-    const mockFunc = jest.fn(
+    const interval = 10
+
+    const mockFunc = vi.fn(
       async (id: number, complete?: (value?: unknown) => void) => {
         if (id === 1) throw new Error('error')
         await delay(1)
@@ -95,21 +118,22 @@ describe('asyncThrottle', () => {
         }
       },
     )
-    const testFunc = asyncThrottle(mockFunc, { interval: 10 })
+    const testFunc = asyncThrottle(mockFunc, { interval })
 
     testFunc(1)
-    await delay(1)
-    await new Promise((resolve) => testFunc(2, resolve))
+    await vi.advanceTimersByTimeAsync(1)
+
+    new Promise((resolve) => testFunc(2, resolve))
+    await vi.advanceTimersByTimeAsync(interval)
 
     expect(mockFunc).toBeCalledTimes(2)
     expect(mockFunc.mock.calls[1]?.[0]).toBe(2)
   })
 
-  test('"onError" should be called when "func" throw error', (done) => {
+  test('"onError" should be called when "func" throw error', () => {
     const err = new Error('error')
     const handleError = (e: unknown) => {
       expect(e).toBe(err)
-      done()
     }
 
     const testFunc = asyncThrottle(

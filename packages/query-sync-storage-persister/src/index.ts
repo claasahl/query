@@ -1,7 +1,8 @@
+import { noop } from './utils'
 import type {
+  PersistRetryer,
   PersistedClient,
   Persister,
-  PersistRetryer,
 } from '@tanstack/query-persist-client-core'
 
 interface Storage {
@@ -12,9 +13,10 @@ interface Storage {
 
 interface CreateSyncStoragePersisterOptions {
   /** The storage client used for setting and retrieving items from cache.
-   * For SSR pass in `undefined`.
+   * For SSR pass in `undefined`. Note that window.localStorage can be
+   * `null` in Android WebViews depending on how they are configured.
    */
-  storage: Storage | undefined
+  storage: Storage | undefined | null
   /** The key to use when storing the cache */
   key?: string
   /** To avoid spamming,
@@ -42,7 +44,7 @@ export function createSyncStoragePersister({
   deserialize = JSON.parse,
   retry,
 }: CreateSyncStoragePersisterOptions): Persister {
-  if (typeof storage !== 'undefined') {
+  if (storage) {
     const trySave = (persistedClient: PersistedClient): Error | undefined => {
       try {
         storage.setItem(key, serialize(persistedClient))
@@ -76,7 +78,7 @@ export function createSyncStoragePersister({
           return
         }
 
-        return deserialize(cacheString) as PersistedClient
+        return deserialize(cacheString)
       },
       removeClient: () => {
         storage.removeItem(key)
@@ -86,12 +88,12 @@ export function createSyncStoragePersister({
 
   return {
     persistClient: noop,
-    restoreClient: () => undefined,
+    restoreClient: noop,
     removeClient: noop,
   }
 }
 
-function throttle<TArgs extends any[]>(
+function throttle<TArgs extends Array<any>>(
   func: (...args: TArgs) => any,
   wait = 100,
 ) {
@@ -107,6 +109,3 @@ function throttle<TArgs extends any[]>(
     }
   }
 }
-
-// eslint-disable-next-line @typescript-eslint/no-empty-function
-function noop() {}

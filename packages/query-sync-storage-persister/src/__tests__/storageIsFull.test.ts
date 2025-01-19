@@ -1,8 +1,9 @@
+import { describe, expect, test } from 'vitest'
 import {
-  dehydrate,
   MutationCache,
   QueryCache,
   QueryClient,
+  dehydrate,
 } from '@tanstack/query-core'
 import { removeOldestQuery } from '@tanstack/query-persist-client-core'
 import { createSyncStoragePersister } from '../index'
@@ -17,7 +18,7 @@ function getMockStorage(limitSize?: number) {
     },
 
     setItem(key: string, value: string) {
-      if (typeof limitSize !== 'undefined') {
+      if (limitSize !== undefined) {
         const currentSize = Array.from(dataSet.entries()).reduce(
           (n, d) => d[0].length + d[1].length + n,
           0,
@@ -39,7 +40,7 @@ function getMockStorage(limitSize?: number) {
   } as any as Storage
 }
 
-describe('createpersister ', () => {
+describe('create persister', () => {
   test('basic store and recover', async () => {
     const queryCache = new QueryCache()
     const mutationCache = new MutationCache()
@@ -51,13 +52,26 @@ describe('createpersister ', () => {
       storage,
     })
 
-    await queryClient.prefetchQuery(['string'], () => Promise.resolve('string'))
-    await queryClient.prefetchQuery(['number'], () => Promise.resolve(1))
-    await queryClient.prefetchQuery(['boolean'], () => Promise.resolve(true))
-    await queryClient.prefetchQuery(['null'], () => Promise.resolve(null))
-    await queryClient.prefetchQuery(['array'], () =>
-      Promise.resolve(['string', 0]),
-    )
+    await queryClient.prefetchQuery({
+      queryKey: ['string'],
+      queryFn: () => Promise.resolve('string'),
+    })
+    await queryClient.prefetchQuery({
+      queryKey: ['number'],
+      queryFn: () => Promise.resolve(1),
+    })
+    await queryClient.prefetchQuery({
+      queryKey: ['boolean'],
+      queryFn: () => Promise.resolve(true),
+    })
+    await queryClient.prefetchQuery({
+      queryKey: ['null'],
+      queryFn: () => Promise.resolve(null),
+    })
+    await queryClient.prefetchQuery({
+      queryKey: ['array'],
+      queryFn: () => Promise.resolve(['string', 0]),
+    })
 
     const persistClient = {
       buster: 'test-buster',
@@ -83,16 +97,31 @@ describe('createpersister ', () => {
       retry: removeOldestQuery,
     })
 
-    await queryClient.prefetchQuery(['A'], () => Promise.resolve('A'.repeat(N)))
+    await queryClient.prefetchQuery({
+      queryKey: ['A'],
+      queryFn: () => Promise.resolve('A'.repeat(N)),
+    })
     await sleep(1)
-    await queryClient.prefetchQuery(['B'], () => Promise.resolve('B'.repeat(N)))
+    await queryClient.prefetchQuery({
+      queryKey: ['B'],
+      queryFn: () => Promise.resolve('B'.repeat(N)),
+    })
     await sleep(1)
-    await queryClient.prefetchQuery(['C'], () => Promise.resolve('C'.repeat(N)))
+    await queryClient.prefetchQuery({
+      queryKey: ['C'],
+      queryFn: () => Promise.resolve('C'.repeat(N)),
+    })
     await sleep(1)
-    await queryClient.prefetchQuery(['D'], () => Promise.resolve('D'.repeat(N)))
+    await queryClient.prefetchQuery({
+      queryKey: ['D'],
+      queryFn: () => Promise.resolve('D'.repeat(N)),
+    })
 
     await sleep(1)
-    await queryClient.prefetchQuery(['E'], () => Promise.resolve('E'.repeat(N)))
+    await queryClient.prefetchQuery({
+      queryKey: ['E'],
+      queryFn: () => Promise.resolve('E'.repeat(N)),
+    })
 
     const persistClient = {
       buster: 'test-limit',
@@ -111,7 +140,10 @@ describe('createpersister ', () => {
     ).not.toBeUndefined()
 
     // update query Data
-    await queryClient.prefetchQuery(['A'], () => Promise.resolve('a'.repeat(N)))
+    await queryClient.prefetchQuery({
+      queryKey: ['A'],
+      queryFn: () => Promise.resolve('a'.repeat(N)),
+    })
     const updatedPersistClient = {
       buster: 'test-limit',
       timestamp: Date.now(),
@@ -141,7 +173,10 @@ describe('createpersister ', () => {
       retry: removeOldestQuery,
     })
 
-    await queryClient.prefetchQuery(['A'], () => Promise.resolve('A'.repeat(N)))
+    await queryClient.prefetchQuery({
+      queryKey: ['A'],
+      queryFn: () => Promise.resolve('A'.repeat(N)),
+    })
     await sleep(1)
 
     const persistClient = {

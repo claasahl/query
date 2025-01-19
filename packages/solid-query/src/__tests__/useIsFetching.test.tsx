@@ -1,15 +1,7 @@
-import { fireEvent, render, screen, waitFor } from 'solid-testing-library'
-
-import {
-  createContext,
-  createEffect,
-  createRenderEffect,
-  createSignal,
-  ErrorBoundary,
-  Show,
-} from 'solid-js'
-import type { QueryClient } from '..'
-import { createQuery, QueryCache, QueryClientProvider, useIsFetching } from '..'
+import { describe, expect, it } from 'vitest'
+import { fireEvent, render, waitFor } from '@solidjs/testing-library'
+import { Show, createEffect, createRenderEffect, createSignal } from 'solid-js'
+import { QueryCache, QueryClientProvider, createQuery, useIsFetching } from '..'
 import { createQueryClient, queryKey, setActTimeout, sleep } from './utils'
 
 describe('useIsFetching', () => {
@@ -27,18 +19,14 @@ describe('useIsFetching', () => {
     function Query() {
       const [ready, setReady] = createSignal(false)
 
-      createQuery(
-        key,
-        async () => {
+      createQuery(() => ({
+        queryKey: key,
+        queryFn: async () => {
           await sleep(50)
           return 'test'
         },
-        {
-          get enabled() {
-            return ready()
-          },
-        },
-      )
+        enabled: ready(),
+      }))
 
       return <button onClick={() => setReady(true)}>setReady</button>
     }
@@ -52,16 +40,16 @@ describe('useIsFetching', () => {
       )
     }
 
-    render(() => (
+    const rendered = render(() => (
       <QueryClientProvider client={queryClient}>
         <Page />
       </QueryClientProvider>
     ))
 
-    await screen.findByText('isFetching: 0')
-    fireEvent.click(screen.getByRole('button', { name: /setReady/i }))
-    await screen.findByText('isFetching: 1')
-    await screen.findByText('isFetching: 0')
+    await rendered.findByText('isFetching: 0')
+    fireEvent.click(rendered.getByRole('button', { name: /setReady/i }))
+    await rendered.findByText('isFetching: 1')
+    await rendered.findByText('isFetching: 0')
   })
 
   it('should not update state while rendering', async () => {
@@ -71,29 +59,35 @@ describe('useIsFetching', () => {
     const key1 = queryKey()
     const key2 = queryKey()
 
-    const isFetchings: number[] = []
+    const isFetchingArray: Array<number> = []
 
     function IsFetching() {
       const isFetching = useIsFetching()
       createRenderEffect(() => {
-        isFetchings.push(isFetching())
+        isFetchingArray.push(isFetching())
       })
       return null
     }
 
     function FirstQuery() {
-      createQuery(key1, async () => {
-        await sleep(100)
-        return 'data'
-      })
+      createQuery(() => ({
+        queryKey: key1,
+        queryFn: async () => {
+          await sleep(150)
+          return 'data'
+        },
+      }))
       return null
     }
 
     function SecondQuery() {
-      createQuery(key2, async () => {
-        await sleep(100)
-        return 'data'
-      })
+      createQuery(() => ({
+        queryKey: key2,
+        queryFn: async () => {
+          await sleep(200)
+          return 'data'
+        },
+      }))
       return null
     }
 
@@ -103,7 +97,7 @@ describe('useIsFetching', () => {
       createEffect(() => {
         setActTimeout(() => {
           setRenderSecond(true)
-        }, 50)
+        }, 100)
       })
 
       return (
@@ -123,7 +117,7 @@ describe('useIsFetching', () => {
       </QueryClientProvider>
     ))
     // unlike react, Updating renderSecond wont cause a rerender for FirstQuery
-    await waitFor(() => expect(isFetchings).toEqual([0, 1, 2, 1, 0]))
+    await waitFor(() => expect(isFetchingArray).toEqual([0, 1, 2, 1, 0]))
   })
 
   it('should be able to filter', async () => {
@@ -131,30 +125,38 @@ describe('useIsFetching', () => {
     const key1 = queryKey()
     const key2 = queryKey()
 
-    const isFetchings: number[] = []
+    const isFetchingArray: Array<number> = []
 
     function One() {
-      createQuery(key1, async () => {
-        await sleep(10)
-        return 'test'
-      })
+      createQuery(() => ({
+        queryKey: key1,
+        queryFn: async () => {
+          await sleep(10)
+          return 'test'
+        },
+      }))
       return null
     }
 
     function Two() {
-      createQuery(key2, async () => {
-        await sleep(20)
-        return 'test'
-      })
+      createQuery(() => ({
+        queryKey: key2,
+        queryFn: async () => {
+          await sleep(20)
+          return 'test'
+        },
+      }))
       return null
     }
 
     function Page() {
       const [started, setStarted] = createSignal(false)
-      const isFetching = useIsFetching(key1)
+      const isFetching = useIsFetching(() => ({
+        queryKey: key1,
+      }))
 
       createRenderEffect(() => {
-        isFetchings.push(isFetching())
+        isFetchingArray.push(isFetching())
       })
 
       return (
@@ -171,100 +173,18 @@ describe('useIsFetching', () => {
       )
     }
 
-    render(() => (
+    const rendered = render(() => (
       <QueryClientProvider client={queryClient}>
         <Page />
       </QueryClientProvider>
     ))
 
-    await screen.findByText('isFetching: 0')
-    fireEvent.click(screen.getByRole('button', { name: /setStarted/i }))
-    await screen.findByText('isFetching: 1')
-    await screen.findByText('isFetching: 0')
+    await rendered.findByText('isFetching: 0')
+    fireEvent.click(rendered.getByRole('button', { name: /setStarted/i }))
+    await rendered.findByText('isFetching: 1')
+    await rendered.findByText('isFetching: 0')
     // at no point should we have isFetching: 2
-    expect(isFetchings).toEqual(expect.not.arrayContaining([2]))
-  })
-
-  describe('with custom context', () => {
-    it('should update as queries start and stop fetching', async () => {
-      const context = createContext<QueryClient | undefined>(undefined)
-
-      const queryCache = new QueryCache()
-      const queryClient = createQueryClient({ queryCache })
-      const key = queryKey()
-
-      function Page() {
-        const [ready, setReady] = createSignal(false)
-
-        const isFetching = useIsFetching(undefined, { context: context })
-
-        createQuery(
-          key,
-          async () => {
-            await sleep(50)
-            return 'test'
-          },
-          {
-            get enabled() {
-              return ready()
-            },
-            context,
-          },
-        )
-
-        return (
-          <div>
-            <div>isFetching: {isFetching}</div>
-            <button onClick={() => setReady(true)}>setReady</button>
-          </div>
-        )
-      }
-
-      render(() => (
-        <QueryClientProvider client={queryClient} context={context}>
-          <Page />
-        </QueryClientProvider>
-      ))
-
-      await screen.findByText('isFetching: 0')
-      fireEvent.click(screen.getByRole('button', { name: /setReady/i }))
-      await screen.findByText('isFetching: 1')
-      await screen.findByText('isFetching: 0')
-    })
-
-    it('should throw if the context is not passed to useIsFetching', async () => {
-      const context = createContext<QueryClient | undefined>(undefined)
-
-      const queryCache = new QueryCache()
-      const queryClient = createQueryClient({ queryCache })
-      const key = queryKey()
-
-      function Page() {
-        const isFetching = useIsFetching()
-
-        createQuery(key, async () => 'test', {
-          enabled: true,
-          context,
-          useErrorBoundary: true,
-        })
-
-        return (
-          <div>
-            <div>isFetching: {isFetching}</div>
-          </div>
-        )
-      }
-
-      render(() => (
-        <QueryClientProvider client={queryClient} context={context}>
-          <ErrorBoundary fallback={() => <div>error boundary</div>}>
-            <Page />
-          </ErrorBoundary>
-        </QueryClientProvider>
-      ))
-
-      await waitFor(() => screen.getByText('error boundary'))
-    })
+    expect(isFetchingArray).toEqual(expect.not.arrayContaining([2]))
   })
 
   it('should show the correct fetching state when mounted after a query', async () => {
@@ -272,10 +192,13 @@ describe('useIsFetching', () => {
     const key = queryKey()
 
     function Page() {
-      createQuery(key, async () => {
-        await sleep(10)
-        return 'test'
-      })
+      createQuery(() => ({
+        queryKey: key,
+        queryFn: async () => {
+          await sleep(10)
+          return 'test'
+        },
+      }))
 
       const isFetching = useIsFetching()
 
@@ -286,13 +209,43 @@ describe('useIsFetching', () => {
       )
     }
 
-    render(() => (
+    const rendered = render(() => (
       <QueryClientProvider client={queryClient}>
         <Page />
       </QueryClientProvider>
     ))
 
-    await screen.findByText('isFetching: 1')
-    await screen.findByText('isFetching: 0')
+    await rendered.findByText('isFetching: 1')
+    await rendered.findByText('isFetching: 0')
+  })
+
+  it('should use provided custom queryClient', async () => {
+    const queryClient = createQueryClient()
+    const key = queryKey()
+
+    function Page() {
+      createQuery(
+        () => ({
+          queryKey: key,
+          queryFn: async () => {
+            await sleep(10)
+            return 'test'
+          },
+        }),
+        () => queryClient,
+      )
+
+      const isFetching = useIsFetching(undefined, () => queryClient)
+
+      return (
+        <div>
+          <div>isFetching: {isFetching()}</div>
+        </div>
+      )
+    }
+
+    const rendered = render(() => <Page></Page>)
+
+    await rendered.findByText('isFetching: 1')
   })
 })

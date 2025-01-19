@@ -1,12 +1,11 @@
-import type { TSESLint, TSESTree } from '@typescript-eslint/utils'
 import { AST_NODE_TYPES } from '@typescript-eslint/utils'
-import type { RuleContext } from '@typescript-eslint/utils/dist/ts-eslint'
 import { uniqueBy } from './unique-by'
+import type { TSESLint, TSESTree } from '@typescript-eslint/utils'
 
 export const ASTUtils = {
   isNodeOfOneOf<T extends AST_NODE_TYPES>(
     node: TSESTree.Node,
-    types: readonly T[],
+    types: ReadonlyArray<T>,
   ): node is TSESTree.Node & { type: T } {
     return types.includes(node.type as T)
   },
@@ -19,10 +18,10 @@ export const ASTUtils = {
   ): node is TSESTree.Identifier {
     return ASTUtils.isIdentifier(node) && node.name === name
   },
-  isIdentifierWithOneOfNames(
+  isIdentifierWithOneOfNames<T extends Array<string>>(
     node: TSESTree.Node,
-    name: string[],
-  ): node is TSESTree.Identifier {
+    name: T,
+  ): node is TSESTree.Identifier & { name: T[number] } {
     return ASTUtils.isIdentifier(node) && name.includes(node.name)
   },
   isProperty(node: TSESTree.Node): node is TSESTree.Property {
@@ -40,18 +39,25 @@ export const ASTUtils = {
     )
   },
   findPropertyWithIdentifierKey(
-    properties: TSESTree.ObjectLiteralElement[],
+    properties: Array<TSESTree.ObjectLiteralElement>,
     key: string,
   ): TSESTree.Property | undefined {
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion
     return properties.find((x) =>
       ASTUtils.isPropertyWithIdentifierKey(x, key),
     ) as TSESTree.Property | undefined
   },
-  getNestedIdentifiers(node: TSESTree.Node): TSESTree.Identifier[] {
-    const identifiers: TSESTree.Identifier[] = []
+  getNestedIdentifiers(node: TSESTree.Node): Array<TSESTree.Identifier> {
+    const identifiers: Array<TSESTree.Identifier> = []
 
     if (ASTUtils.isIdentifier(node)) {
       identifiers.push(node)
+    }
+
+    if ('arguments' in node) {
+      node.arguments.forEach((x) => {
+        identifiers.push(...ASTUtils.getNestedIdentifiers(x))
+      })
     }
 
     if ('elements' in node) {
@@ -72,6 +78,14 @@ export const ASTUtils = {
       node.expressions.forEach((x) => {
         identifiers.push(...ASTUtils.getNestedIdentifiers(x))
       })
+    }
+
+    if ('left' in node) {
+      identifiers.push(...ASTUtils.getNestedIdentifiers(node.left))
+    }
+
+    if ('right' in node) {
+      identifiers.push(...ASTUtils.getNestedIdentifiers(node.right))
     }
 
     if (node.type === AST_NODE_TYPES.Property) {
@@ -96,6 +110,24 @@ export const ASTUtils = {
 
     if (node.type === AST_NODE_TYPES.TSNonNullExpression) {
       identifiers.push(...ASTUtils.getNestedIdentifiers(node.expression))
+    }
+
+    if (node.type === AST_NODE_TYPES.ArrowFunctionExpression) {
+      identifiers.push(...ASTUtils.getNestedIdentifiers(node.body))
+    }
+
+    if (node.type === AST_NODE_TYPES.FunctionExpression) {
+      identifiers.push(...ASTUtils.getNestedIdentifiers(node.body))
+    }
+
+    if (node.type === AST_NODE_TYPES.BlockStatement) {
+      identifiers.push(
+        ...node.body.map((body) => ASTUtils.getNestedIdentifiers(body)).flat(),
+      )
+    }
+
+    if (node.type === AST_NODE_TYPES.ReturnStatement && node.argument) {
+      identifiers.push(...ASTUtils.getNestedIdentifiers(node.argument))
     }
 
     return identifiers
@@ -124,7 +156,7 @@ export const ASTUtils = {
   },
   traverseUpOnly(
     identifier: TSESTree.Node,
-    allowedNodeTypes: AST_NODE_TYPES[],
+    allowedNodeTypes: Array<AST_NODE_TYPES>,
   ): TSESTree.Node {
     const parent = identifier.parent
 
@@ -134,26 +166,56 @@ export const ASTUtils = {
 
     return identifier
   },
+  isDeclaredInNode(params: {
+    functionNode: TSESTree.Node
+    reference: TSESLint.Scope.Reference
+    scopeManager: TSESLint.Scope.ScopeManager
+  }) {
+    const { functionNode, reference, scopeManager } = params
+    const scope = scopeManager.acquire(functionNode)
+
+    if (scope === null) {
+      return false
+    }
+
+    return scope.set.has(reference.identifier.name)
+  },
   getExternalRefs(params: {
     scopeManager: TSESLint.Scope.ScopeManager
+    sourceCode: Readonly<TSESLint.SourceCode>
     node: TSESTree.Node
-  }): TSESLint.Scope.Reference[] {
-    const { scopeManager, node } = params
+  }): Array<TSESLint.Scope.Reference> {
+    const { scopeManager, sourceCode, node } = params
     const scope = scopeManager.acquire(node)
 
     if (scope === null) {
       return []
     }
 
-    const readOnlyRefs = scope.references.filter((x) => x.isRead())
+    const references = scope.references
+      .filter((x) => x.isRead() && !scope.set.has(x.identifier.name))
+      .map((x) => {
+        const referenceNode = ASTUtils.traverseUpOnly(x.identifier, [
+          AST_NODE_TYPES.MemberExpression,
+          AST_NODE_TYPES.Identifier,
+        ])
+
+        return {
+          variable: x,
+          node: referenceNode,
+          text: sourceCode.getText(referenceNode),
+        }
+      })
+
     const localRefIds = new Set(
-      [...scope.set.values()].map((x) => x.identifiers[0]),
-    )
-    const externalRefs = readOnlyRefs.filter(
-      (x) => x.resolved === null || !localRefIds.has(x.resolved.identifiers[0]),
+      [...scope.set.values()].map((x) => sourceCode.getText(x.identifiers[0])),
     )
 
-    return uniqueBy(externalRefs, (x) => x.resolved)
+    const externalRefs = references.filter(
+      (x) => x.variable.resolved === null || !localRefIds.has(x.text),
+    )
+
+    return uniqueBy(externalRefs, (x) => x.text).map((x) => x.variable)
   },
   mapKeyNodeToText(
     node: TSESTree.Node,
@@ -162,20 +224,75 @@ export const ASTUtils = {
     return sourceCode.getText(
       ASTUtils.traverseUpOnly(node, [
         AST_NODE_TYPES.MemberExpression,
+        AST_NODE_TYPES.TSNonNullExpression,
         AST_NODE_TYPES.Identifier,
       ]),
     )
   },
+  mapKeyNodeToBaseText(
+    node: TSESTree.Node,
+    sourceCode: Readonly<TSESLint.SourceCode>,
+  ) {
+    return ASTUtils.mapKeyNodeToText(node, sourceCode).replace(
+      /(?:\?(\.)|!)/g,
+      '$1',
+    )
+  },
+  isValidReactComponentOrHookName(
+    identifier: TSESTree.Identifier | null | undefined,
+  ) {
+    return (
+      identifier !== null &&
+      identifier !== undefined &&
+      /^(use|[A-Z])/.test(identifier.name)
+    )
+  },
+  getFunctionAncestor(
+    sourceCode: Readonly<TSESLint.SourceCode>,
+    node: TSESTree.Node,
+  ) {
+    for (const ancestor of sourceCode.getAncestors(node)) {
+      if (
+        ASTUtils.isNodeOfOneOf(ancestor, [
+          AST_NODE_TYPES.FunctionDeclaration,
+          AST_NODE_TYPES.FunctionExpression,
+          AST_NODE_TYPES.ArrowFunctionExpression,
+        ])
+      ) {
+        return ancestor
+      }
+
+      if (
+        ancestor.parent?.type === AST_NODE_TYPES.VariableDeclarator &&
+        ancestor.parent.id.type === AST_NODE_TYPES.Identifier &&
+        ASTUtils.isNodeOfOneOf(ancestor, [
+          AST_NODE_TYPES.FunctionDeclaration,
+          AST_NODE_TYPES.FunctionExpression,
+          AST_NODE_TYPES.ArrowFunctionExpression,
+        ])
+      ) {
+        return ancestor
+      }
+    }
+
+    return undefined
+  },
   getReferencedExpressionByIdentifier(params: {
     node: TSESTree.Node
-    context: Readonly<RuleContext<string, readonly unknown[]>>
+    context: Readonly<TSESLint.RuleContext<string, ReadonlyArray<unknown>>>
   }) {
     const { node, context } = params
 
-    const resolvedNode = context
-      .getScope()
-      .references.find((ref) => ref.identifier === node)?.resolved
-      ?.defs[0]?.node
+    // we need the fallbacks for backwards compat with eslint < 8.37.0
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+    const sourceCode = context.sourceCode ?? context.getSourceCode()
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+    const scope = context.sourceCode.getScope(node)
+      ? sourceCode.getScope(node)
+      : context.getScope()
+
+    const resolvedNode = scope.references.find((ref) => ref.identifier === node)
+      ?.resolved?.defs[0]?.node
 
     if (resolvedNode?.type !== AST_NODE_TYPES.VariableDeclarator) {
       return null
@@ -183,8 +300,23 @@ export const ASTUtils = {
 
     return resolvedNode.init
   },
-  getNestedReturnStatements(node: TSESTree.Node): TSESTree.ReturnStatement[] {
-    const returnStatements: TSESTree.ReturnStatement[] = []
+  getClosestVariableDeclarator(node: TSESTree.Node) {
+    let currentNode: TSESTree.Node | undefined = node
+
+    while (currentNode.type !== AST_NODE_TYPES.Program) {
+      if (currentNode.type === AST_NODE_TYPES.VariableDeclarator) {
+        return currentNode
+      }
+
+      currentNode = currentNode.parent
+    }
+
+    return undefined
+  },
+  getNestedReturnStatements(
+    node: TSESTree.Node,
+  ): Array<TSESTree.ReturnStatement> {
+    const returnStatements: Array<TSESTree.ReturnStatement> = []
 
     if (node.type === AST_NODE_TYPES.ReturnStatement) {
       returnStatements.push(node)

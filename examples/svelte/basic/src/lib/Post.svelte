@@ -1,24 +1,21 @@
 <script lang="ts">
   import { createQuery } from '@tanstack/svelte-query'
   import { getPostById } from './data'
+  import type { Post } from './types'
 
   export let postId: number
-  export let setPostId: (id: number) => void
 
-  const post = createQuery<{ title: string; body: string }, Error>({
+  const post = createQuery<Post>({
     queryKey: ['post', postId],
     queryFn: () => getPostById(postId),
-    enabled: !!postId,
   })
 </script>
 
 <div>
   <div>
-    <button class="btn btn-primary" on:click={() => setPostId(-1)}>
-      Back
-    </button>
+    <a class="button" href="/"> Back </a>
   </div>
-  {#if !postId || $post.isLoading}
+  {#if !postId || $post.isPending}
     <span>Loading...</span>
   {/if}
   {#if $post.error}

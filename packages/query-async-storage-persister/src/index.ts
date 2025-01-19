@@ -1,15 +1,12 @@
+import { asyncThrottle } from './asyncThrottle'
+import { noop } from './utils'
 import type {
+  AsyncStorage,
+  MaybePromise,
   PersistedClient,
   Persister,
   Promisable,
 } from '@tanstack/query-persist-client-core'
-import { asyncThrottle } from './asyncThrottle'
-
-interface AsyncStorage {
-  getItem: (key: string) => Promise<string | null>
-  setItem: (key: string, value: string) => Promise<unknown>
-  removeItem: (key: string) => Promise<void>
-}
 
 export type AsyncPersistRetryer = (props: {
   persistedClient: PersistedClient
@@ -19,9 +16,10 @@ export type AsyncPersistRetryer = (props: {
 
 interface CreateAsyncStoragePersisterOptions {
   /** The storage client used for setting and retrieving items from cache.
-   * For SSR pass in `undefined`.
+   * For SSR pass in `undefined`. Note that window.localStorage can be
+   * `null` in Android WebViews depending on how they are configured.
    */
-  storage: AsyncStorage | undefined
+  storage: AsyncStorage<string> | undefined | null
   /** The key to use when storing the cache */
   key?: string
   /** To avoid spamming,
@@ -31,12 +29,12 @@ interface CreateAsyncStoragePersisterOptions {
    * How to serialize the data to storage.
    * @default `JSON.stringify`
    */
-  serialize?: (client: PersistedClient) => string
+  serialize?: (client: PersistedClient) => MaybePromise<string>
   /**
    * How to deserialize the data from storage.
    * @default `JSON.parse`
    */
-  deserialize?: (cachedString: string) => PersistedClient
+  deserialize?: (cachedString: string) => MaybePromise<PersistedClient>
 
   retry?: AsyncPersistRetryer
 }
@@ -49,12 +47,13 @@ export const createAsyncStoragePersister = ({
   deserialize = JSON.parse,
   retry,
 }: CreateAsyncStoragePersisterOptions): Persister => {
-  if (typeof storage !== 'undefined') {
+  if (storage) {
     const trySave = async (
       persistedClient: PersistedClient,
     ): Promise<Error | undefined> => {
       try {
-        await storage.setItem(key, serialize(persistedClient))
+        const serialized = await serialize(persistedClient)
+        await storage.setItem(key, serialized)
         return
       } catch (error) {
         return error as Error
@@ -89,7 +88,7 @@ export const createAsyncStoragePersister = ({
           return
         }
 
-        return deserialize(cacheString) as PersistedClient
+        return await deserialize(cacheString)
       },
       removeClient: () => storage.removeItem(key),
     }
@@ -101,6 +100,3 @@ export const createAsyncStoragePersister = ({
     removeClient: noop,
   }
 }
-
-// eslint-disable-next-line @typescript-eslint/no-empty-function
-function noop() {}

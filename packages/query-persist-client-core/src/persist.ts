@@ -1,17 +1,18 @@
-import type {
-  QueryClient,
-  DehydratedState,
-  DehydrateOptions,
-  HydrateOptions,
-} from '@tanstack/query-core'
 import { dehydrate, hydrate } from '@tanstack/query-core'
+import type {
+  DehydrateOptions,
+  DehydratedState,
+  HydrateOptions,
+  NotifyEventType,
+  QueryClient,
+} from '@tanstack/query-core'
 
 export type Promisable<T> = T | PromiseLike<T>
 
 export interface Persister {
-  persistClient(persistClient: PersistedClient): Promisable<void>
-  restoreClient(): Promisable<PersistedClient | undefined>
-  removeClient(): Promisable<void>
+  persistClient: (persistClient: PersistedClient) => Promisable<void>
+  restoreClient: () => Promisable<PersistedClient | undefined>
+  removeClient: () => Promisable<void>
 }
 
 export interface PersistedClient {
@@ -20,7 +21,7 @@ export interface PersistedClient {
   clientState: DehydratedState
 }
 
-export interface PersistQueryClienRootOptions {
+export interface PersistQueryClientRootOptions {
   /** The QueryClient to persist */
   queryClient: QueryClient
   /** The Persister interface for storing and restoring the cache
@@ -32,7 +33,7 @@ export interface PersistQueryClienRootOptions {
 }
 
 export interface PersistedQueryClientRestoreOptions
-  extends PersistQueryClienRootOptions {
+  extends PersistQueryClientRootOptions {
   /** The max-allowed age of the cache in milliseconds.
    * If a persisted cache is found that is older than this
    * time, it will be discarded */
@@ -42,7 +43,7 @@ export interface PersistedQueryClientRestoreOptions
 }
 
 export interface PersistedQueryClientSaveOptions
-  extends PersistQueryClienRootOptions {
+  extends PersistQueryClientRootOptions {
   /** The options passed to the dehydrate function */
   dehydrateOptions?: DehydrateOptions
 }
@@ -50,7 +51,17 @@ export interface PersistedQueryClientSaveOptions
 export interface PersistQueryClientOptions
   extends PersistedQueryClientRestoreOptions,
     PersistedQueryClientSaveOptions,
-    PersistQueryClienRootOptions {}
+    PersistQueryClientRootOptions {}
+
+/**
+ * Checks if emitted event is about cache change and not about observers.
+ * Useful for persist, where we only want to trigger save when cache is changed.
+ */
+const cacheEventTypes: Array<NotifyEventType> = ['added', 'removed', 'updated']
+
+function isCacheEventType(eventType: NotifyEventType) {
+  return cacheEventTypes.includes(eventType)
+}
 
 /**
  * Restores persisted data to the QueryCache
@@ -83,12 +94,10 @@ export async function persistQueryClientRestore({
     }
   } catch (err) {
     if (process.env.NODE_ENV !== 'production') {
-      queryClient.getLogger().error(err)
-      queryClient
-        .getLogger()
-        .warn(
-          'Encountered an error attempting to restore client cache from persisted location. As a precaution, the persisted cache will be discarded.',
-        )
+      console.error(err)
+      console.warn(
+        'Encountered an error attempting to restore client cache from persisted location. As a precaution, the persisted cache will be discarded.',
+      )
     }
     persister.removeClient()
   }
@@ -123,19 +132,23 @@ export function persistQueryClientSubscribe(
 ) {
   const unsubscribeQueryCache = props.queryClient
     .getQueryCache()
-    .subscribe(() => {
-      persistQueryClientSave(props)
+    .subscribe((event) => {
+      if (isCacheEventType(event.type)) {
+        persistQueryClientSave(props)
+      }
     })
 
-  const unusbscribeMutationCache = props.queryClient
+  const unsubscribeMutationCache = props.queryClient
     .getMutationCache()
-    .subscribe(() => {
-      persistQueryClientSave(props)
+    .subscribe((event) => {
+      if (isCacheEventType(event.type)) {
+        persistQueryClientSave(props)
+      }
     })
 
   return () => {
     unsubscribeQueryCache()
-    unusbscribeMutationCache()
+    unsubscribeMutationCache()
   }
 }
 

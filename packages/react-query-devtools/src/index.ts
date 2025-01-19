@@ -1,15 +1,18 @@
-import * as devtools from './devtools'
+'use client'
 
-export const ReactQueryDevtools: typeof devtools['ReactQueryDevtools'] =
+import * as Devtools from './ReactQueryDevtools'
+import * as DevtoolsPanel from './ReactQueryDevtoolsPanel'
+
+export const ReactQueryDevtools: (typeof Devtools)['ReactQueryDevtools'] =
   process.env.NODE_ENV !== 'development'
     ? function () {
         return null
       }
-    : devtools.ReactQueryDevtools
+    : Devtools.ReactQueryDevtools
 
-export const ReactQueryDevtoolsPanel: typeof devtools['ReactQueryDevtoolsPanel'] =
+export const ReactQueryDevtoolsPanel: (typeof DevtoolsPanel)['ReactQueryDevtoolsPanel'] =
   process.env.NODE_ENV !== 'development'
-    ? (function () {
+    ? function () {
         return null
-      } as any)
-    : devtools.ReactQueryDevtoolsPanel
+      }
+    : DevtoolsPanel.ReactQueryDevtoolsPanel

@@ -1,131 +1,175 @@
 /* istanbul ignore file */
 
-import type { Context } from 'solid-js'
 import type {
-  QueryClient,
-  QueryKey,
-  QueryObserverOptions,
-  QueryObserverResult,
+  DefaultError,
+  DefinedInfiniteQueryObserverResult,
+  DefinedQueryObserverResult,
+  InfiniteQueryObserverResult,
   MutateFunction,
   MutationObserverOptions,
   MutationObserverResult,
-  DefinedQueryObserverResult,
-  InfiniteQueryObserverOptions,
-  InfiniteQueryObserverResult,
-  QueryFilters,
-  QueryOptions,
+  OmitKeyof,
+  Override,
+  QueryKey,
+  QueryObserverResult,
 } from '@tanstack/query-core'
+import type {
+  InfiniteQueryObserverOptions,
+  QueryObserverOptions,
+} from './QueryClient'
 
-export interface ContextOptions {
-  /**
-   * Use this to pass your Solid Query context. Otherwise, `defaultContext` will be used.
-   */
-  context?: Context<QueryClient | undefined>
-}
-
-/* --- Create Query and Create Base Query  Types --- */
-export type SolidQueryKey = () => readonly unknown[]
+export type FunctionedParams<T> = () => T
 
 export interface CreateBaseQueryOptions<
   TQueryFnData = unknown,
-  TError = unknown,
+  TError = DefaultError,
   TData = TQueryFnData,
   TQueryData = TQueryFnData,
   TQueryKey extends QueryKey = QueryKey,
-> extends ContextOptions,
-    QueryObserverOptions<TQueryFnData, TError, TData, TQueryData, TQueryKey> {}
-
-export interface CreateQueryOptions<
-  TQueryFnData = unknown,
-  TError = unknown,
-  TData = TQueryFnData,
-  TQueryKey extends () => readonly unknown[] = SolidQueryKey,
-> extends Omit<
-    CreateBaseQueryOptions<
-      TQueryFnData,
-      TError,
-      TData,
-      TQueryFnData,
-      ReturnType<TQueryKey>
-    >,
-    'queryKey'
+> extends OmitKeyof<
+    QueryObserverOptions<TQueryFnData, TError, TData, TQueryData, TQueryKey>,
+    'suspense'
   > {
-  queryKey?: TQueryKey
+  /**
+   * Only applicable while rendering queries on the server with streaming.
+   * Set `deferStream` to `true` to wait for the query to resolve on the server before flushing the stream.
+   * This can be useful to avoid sending a loading state to the client before the query has resolved.
+   * Defaults to `false`.
+   */
+  deferStream?: boolean
+  /**
+   * @deprecated The `suspense` option has been deprecated in v5 and will be removed in the next major version.
+   * The `data` property on createQuery is a SolidJS resource and will automatically suspend when the data is loading.
+   * Setting `suspense` to `false` will be a no-op.
+   */
+  suspense?: boolean
 }
+
+export interface SolidQueryOptions<
+  TQueryFnData = unknown,
+  TError = DefaultError,
+  TData = TQueryFnData,
+  TQueryKey extends QueryKey = QueryKey,
+> extends CreateBaseQueryOptions<
+    TQueryFnData,
+    TError,
+    TData,
+    TQueryFnData,
+    TQueryKey
+  > {}
+
+export type CreateQueryOptions<
+  TQueryFnData = unknown,
+  TError = DefaultError,
+  TData = TQueryFnData,
+  TQueryKey extends QueryKey = QueryKey,
+> = FunctionedParams<SolidQueryOptions<TQueryFnData, TError, TData, TQueryKey>>
+
+/* --- Create Query and Create Base Query  Types --- */
 
 export type CreateBaseQueryResult<
   TData = unknown,
-  TError = unknown,
+  TError = DefaultError,
 > = QueryObserverResult<TData, TError>
 
 export type CreateQueryResult<
   TData = unknown,
-  TError = unknown,
+  TError = DefaultError,
 > = CreateBaseQueryResult<TData, TError>
 
 export type DefinedCreateBaseQueryResult<
   TData = unknown,
-  TError = unknown,
+  TError = DefaultError,
 > = DefinedQueryObserverResult<TData, TError>
 
 export type DefinedCreateQueryResult<
   TData = unknown,
-  TError = unknown,
+  TError = DefaultError,
 > = DefinedCreateBaseQueryResult<TData, TError>
 
-export type ParseQueryArgs<
-  TOptions extends Omit<
-    QueryOptions<any, any, any, ReturnType<TQueryKey>>,
-    'queryKey'
-  > & {
-    queryKey?: TQueryKey
-  },
-  TQueryKey extends () => readonly unknown[] = SolidQueryKey,
-> = TOptions['queryKey'] extends () => infer R
-  ? Omit<TOptions, 'queryKey'> & { queryKey?: R }
-  : TOptions
-
 /* --- Create Infinite Queries Types --- */
-export interface CreateInfiniteQueryOptions<
+export interface SolidInfiniteQueryOptions<
   TQueryFnData = unknown,
-  TError = unknown,
+  TError = DefaultError,
   TData = TQueryFnData,
   TQueryData = TQueryFnData,
-  TQueryKey extends () => readonly unknown[] = SolidQueryKey,
-> extends ContextOptions,
-    Omit<
-      InfiniteQueryObserverOptions<
-        TQueryFnData,
-        TError,
-        TData,
-        TQueryData,
-        ReturnType<TQueryKey>
-      >,
-      'queryKey'
-    > {
-  queryKey?: TQueryKey
+  TQueryKey extends QueryKey = QueryKey,
+  TPageParam = unknown,
+> extends OmitKeyof<
+    InfiniteQueryObserverOptions<
+      TQueryFnData,
+      TError,
+      TData,
+      TQueryData,
+      TQueryKey,
+      TPageParam
+    >,
+    'queryKey' | 'suspense'
+  > {
+  queryKey: TQueryKey
+  /**
+   * Only applicable while rendering queries on the server with streaming.
+   * Set `deferStream` to `true` to wait for the query to resolve on the server before flushing the stream.
+   * This can be useful to avoid sending a loading state to the client before the query has resolved.
+   * Defaults to `false`.
+   */
+  deferStream?: boolean
+  /**
+   * @deprecated The `suspense` option has been deprecated in v5 and will be removed in the next major version.
+   * The `data` property on createInfiniteQuery is a SolidJS resource and will automatically suspend when the data is loading.
+   * Setting `suspense` to `false` will be a no-op.
+   */
+  suspense?: boolean
 }
+
+export type CreateInfiniteQueryOptions<
+  TQueryFnData = unknown,
+  TError = DefaultError,
+  TData = TQueryFnData,
+  TQueryKey extends QueryKey = QueryKey,
+  TPageParam = unknown,
+> = FunctionedParams<
+  SolidInfiniteQueryOptions<
+    TQueryFnData,
+    TError,
+    TData,
+    TQueryFnData,
+    TQueryKey,
+    TPageParam
+  >
+>
 
 export type CreateInfiniteQueryResult<
   TData = unknown,
-  TError = unknown,
+  TError = DefaultError,
 > = InfiniteQueryObserverResult<TData, TError>
 
-/* --- Create Mutation Types --- */
-export interface CreateMutationOptions<
+export type DefinedCreateInfiniteQueryResult<
   TData = unknown,
-  TError = unknown,
+  TError = DefaultError,
+> = DefinedInfiniteQueryObserverResult<TData, TError>
+
+/* --- Create Mutation Types --- */
+export interface SolidMutationOptions<
+  TData = unknown,
+  TError = DefaultError,
   TVariables = void,
   TContext = unknown,
-> extends ContextOptions,
-    Omit<
-      MutationObserverOptions<TData, TError, TVariables, TContext>,
-      '_defaulted' | 'variables'
-    > {}
+> extends OmitKeyof<
+    MutationObserverOptions<TData, TError, TVariables, TContext>,
+    '_defaulted'
+  > {}
+
+export type CreateMutationOptions<
+  TData = unknown,
+  TError = DefaultError,
+  TVariables = void,
+  TContext = unknown,
+> = FunctionedParams<SolidMutationOptions<TData, TError, TVariables, TContext>>
 
 export type CreateMutateFunction<
   TData = unknown,
-  TError = unknown,
+  TError = DefaultError,
   TVariables = void,
   TContext = unknown,
 > = (
@@ -134,14 +178,14 @@ export type CreateMutateFunction<
 
 export type CreateMutateAsyncFunction<
   TData = unknown,
-  TError = unknown,
+  TError = DefaultError,
   TVariables = void,
   TContext = unknown,
 > = MutateFunction<TData, TError, TVariables, TContext>
 
 export type CreateBaseMutationResult<
   TData = unknown,
-  TError = unknown,
+  TError = DefaultError,
   TVariables = unknown,
   TContext = unknown,
 > = Override<
@@ -153,17 +197,7 @@ export type CreateBaseMutationResult<
 
 export type CreateMutationResult<
   TData = unknown,
-  TError = unknown,
+  TError = DefaultError,
   TVariables = unknown,
   TContext = unknown,
 > = CreateBaseMutationResult<TData, TError, TVariables, TContext>
-
-type Override<A, B> = { [K in keyof A]: K extends keyof B ? B[K] : A[K] }
-
-/* --- Use Is Fetching Types --- */
-export interface SolidQueryFilters extends Omit<QueryFilters, 'queryKey'> {
-  queryKey?: SolidQueryKey
-}
-
-export type ParseFilterArgs<T extends SolidQueryFilters> =
-  T['queryKey'] extends () => infer R ? T & { queryKey: R } : T
